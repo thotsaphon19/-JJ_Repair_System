@@ -40,19 +40,33 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function initLIFF() {
   try {
     if (!LIFF_ID || LIFF_ID === 'YOUR-LIFF-ID') throw new Error('no liff id');
+
+    showLoader('กำลังเชื่อมต่อ LINE...');
     await liff.init({ liffId: LIFF_ID });
     App.isLIFF = liff.isInClient();
+
     if (liff.isLoggedIn()) {
+      // Login สำเร็จ — ดึงโปรไฟล์และเข้าสู่ระบบทันที
+      showLoader('กำลังโหลดข้อมูล...');
       App.user = await liff.getProfile();
-      App.isLoggedIn = true; App.role = 'user';
+      App.isLoggedIn = true;
+      App.role = 'user';
       await loadUserProfile();
+      hideLoader();
       await navigateAfterLogin();
     } else {
-      if (App.isLIFF) liff.login({ redirectUri: location.href });
-      else showScreen('screen-login');
+      hideLoader();
+      if (App.isLIFF) {
+        // อยู่ใน LINE App → auto login ทันทีเลย ไม่แสดงหน้า login
+        liff.login({ redirectUri: location.href });
+      } else {
+        // เปิดผ่าน Browser → แสดงหน้า login ให้กดเอง
+        showScreen('screen-login');
+      }
     }
   } catch (e) {
-    console.warn('LIFF fallback:', e.message);
+    hideLoader();
+    console.warn('LIFF init failed:', e.message);
     showScreen('screen-login');
   }
 }
@@ -113,18 +127,38 @@ function showLoader(msg) {
 function hideLoader() { if (loader) loader.style.display = 'none'; }
 
 // ─── LOGIN (USER via LINE) ────────────────────────────────────
-document.getElementById('btn-line-login')?.addEventListener('click', () => {
-  if (typeof liff !== 'undefined' && !liff.isLoggedIn()) liff.login({ redirectUri: location.href });
-});
+document.getElementById('btn-line-login')?.addEventListener('click', async () => {
+  const btn = document.getElementById('btn-line-login');
+  btn.disabled = true;
+  btn.innerHTML = '<span style="font-size:18px;">⏳</span> กำลังเชื่อมต่อ LINE...';
 
-// Browser fallback login
-document.getElementById('btn-browser-login')?.addEventListener('click', () => {
-  const u = document.getElementById('login-user').value.trim();
-  const p = document.getElementById('login-pass').value.trim();
-  if (!u || !p) { showToast('⚠️ กรุณากรอกข้อมูลให้ครบ'); return; }
-  App.user = { userId: 'browser_'+u, displayName: u, pictureUrl: '' };
-  App.isLoggedIn = true; App.role = 'user';
-  showSetupScreen();
+  try {
+    if (typeof liff === 'undefined') throw new Error('LIFF SDK not loaded');
+
+    if (!liff.isInitialized()) {
+      // LIFF ยังไม่ได้ init (กรณี LIFF_ID ไม่ถูกต้อง) ─ init ใหม่
+      await liff.init({ liffId: LIFF_ID });
+    }
+
+    if (liff.isLoggedIn()) {
+      // Login อยู่แล้ว ─ ดึงโปรไฟล์และเข้าระบบ
+      showLoader('กำลังโหลดข้อมูล...');
+      App.user = await liff.getProfile();
+      App.isLoggedIn = true; App.role = 'user';
+      await loadUserProfile();
+      hideLoader();
+      await navigateAfterLogin();
+    } else {
+      // ยังไม่ได้ login ─ redirect ไป LINE Login
+      liff.login({ redirectUri: location.href });
+    }
+  } catch (e) {
+    hideLoader();
+    btn.disabled = false;
+    btn.innerHTML = '<span style="font-size:20px;">💬</span> เข้าสู่ระบบด้วย LINE';
+    showToast('❌ ไม่สามารถเชื่อมต่อ LINE ได้: ' + e.message);
+    console.error('LINE login error:', e);
+  }
 });
 
 // ─── ADMIN LOGIN ──────────────────────────────────────────────
