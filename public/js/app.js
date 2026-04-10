@@ -241,8 +241,12 @@ document.getElementById('btn-save-profile')?.addEventListener('click', async () 
   showLoader('กำลังบันทึก...');
   try {
     const res = await UserAPI.save({
-      lineId: App.user?.userId || '', displayName: name,
-      pictureUrl: App.user?.pictureUrl || '', dept, phone, project, houseNo, role: 'user',
+      lineId:      App.user?.userId || '',
+      displayName: name,
+      pictureUrl:  App.user?.pictureUrl || '',
+      dept:        '',
+      phone, project, houseNo,
+      role: 'user',
     });
     if (res.ok) {
       App.userProfile = { displayName:name, dept, phone, project, houseNo, role:'user', pictureUrl:App.user?.pictureUrl||'' };
@@ -434,11 +438,12 @@ function showFormScreen() {
   const us = document.getElementById('upload-status');
   if (us) us.textContent = '';
   if (App.userProfile) {
-    document.getElementById('f-name').value     = App.userProfile.displayName||'';
-    document.getElementById('f-dept').value     = App.userProfile.dept||'';
-    document.getElementById('f-tel').value      = App.userProfile.phone||'';
-    document.getElementById('f-project').value  = App.userProfile.project||'';
-    document.getElementById('f-houseno').value  = App.userProfile.houseNo||'';
+    document.getElementById('f-name').value     = App.userProfile.displayName || App.user?.displayName || '';
+    document.getElementById('f-tel').value      = App.userProfile.phone || '';
+    document.getElementById('f-project').value  = App.userProfile.project || '';
+    document.getElementById('f-houseno').value  = App.userProfile.houseNo || '';
+  } else if (App.user) {
+    document.getElementById('f-name').value = App.user.displayName || '';
   }
 }
 
@@ -492,29 +497,65 @@ document.getElementById('photo-input')?.addEventListener('change', async functio
 document.getElementById('btn-submit-repair')?.addEventListener('click', submitRepair);
 
 async function submitRepair() {
-  const name    = document.getElementById('f-name').value.trim();
-  const dept    = document.getElementById('f-dept').value;
-  const tel     = document.getElementById('f-tel').value.trim();
-  const type    = document.getElementById('f-type').value;
-  const detail  = document.getElementById('f-detail').value.trim();
-  const priority= document.getElementById('f-priority').value;
-  const location= document.getElementById('f-location').value.trim();
-  const project = document.getElementById('f-project').value.trim();
-  const houseNo = document.getElementById('f-houseno').value.trim();
-  if (!name||!type||!detail) { showToast('⚠️ กรุณากรอกชื่อ, ประเภท, และรายละเอียด'); return; }
+  // ป้องกัน double-submit
+  const submitBtn = document.getElementById('btn-submit-repair');
+  if (submitBtn && submitBtn.disabled) return;
+
+  const name     = (document.getElementById('f-name')?.value || '').trim();
+  const tel      = (document.getElementById('f-tel')?.value || '').trim();
+  const type     = document.getElementById('f-type')?.value || '';
+  const detail   = (document.getElementById('f-detail')?.value || '').trim();
+  const priority = document.getElementById('f-priority')?.value || 'normal';
+  const location = (document.getElementById('f-location')?.value || '').trim();
+  const project  = (document.getElementById('f-project')?.value || '').trim();
+  const houseNo  = (document.getElementById('f-houseno')?.value || '').trim();
+
+  // Validation
+  if (!name) { showToast('⚠️ กรุณากรอกชื่อผู้แจ้ง'); return; }
+  if (!type) { showToast('⚠️ กรุณาเลือกประเภทงานซ่อม'); return; }
+  if (!detail) { showToast('⚠️ กรุณากรอกรายละเอียด'); return; }
+
+  // ล็อกปุ่มป้องกัน double-submit
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '⏳ กำลังส่ง...';
+  }
+
   showLoader('กำลังส่งแจ้งซ่อม...');
   try {
-    const res = await RepairAPI.create({
-      reporterName: name, reporterDept: dept, reporterPhone: tel,
-      reporterLineId: App.user?.userId||'',
+    const payload = {
+      reporterName:   name,
+      reporterDept:   '',
+      reporterPhone:  tel,
+      reporterLineId: App.user?.userId || '',
       project, houseNo, type, detail, priority, location,
-      lat: App.gpsCoords?.lat||'', lng: App.gpsCoords?.lng||'',
-      imageUrl: App.uploadedImageUrl||'', imageId: App.uploadedImageId||'',
-    });
+      lat:      App.gpsCoords?.lat || '',
+      lng:      App.gpsCoords?.lng || '',
+      imageUrl: App.uploadedImageUrl || '',
+      imageId:  App.uploadedImageId  || '',
+    };
+
+    const res = await RepairAPI.create(payload);
     hideLoader();
-    if (res.ok) { showNotifScreen(res.id,{name,dept,type,detail,priority,location,project,houseNo}); resetForm(); }
-    else showToast('❌ '+(res.error||'เกิดข้อผิดพลาด'));
-  } catch (e) { hideLoader(); showToast('❌ '+e.message); }
+
+    if (res.ok) {
+      showToast('✅ ส่งแจ้งซ่อมสำเร็จ!');
+      showNotifScreen(res.id, { name, type, detail, priority, location, project, houseNo });
+      resetForm();
+    } else {
+      showToast('❌ ' + (res.error || 'เกิดข้อผิดพลาด กรุณาลองใหม่'));
+    }
+  } catch (e) {
+    hideLoader();
+    console.error('submitRepair error:', e);
+    showToast('❌ ไม่สามารถส่งได้: ' + e.message);
+  } finally {
+    // ปลดล็อกปุ่มเสมอ
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '📤 ส่งแจ้งซ่อม';
+    }
+  }
 }
 
 function resetForm() {
