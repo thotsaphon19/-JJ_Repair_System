@@ -1,0 +1,10 @@
+{
+  "name": "JJ22 Repair System",
+  "short_name": "JJ22 Repair",
+  "description": "ระบบแจ้งซ่อมออนไลน์",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#2563eb",
+  "theme_color": "#2563eb",
+  "orientation": "portrait"
+}
